@@ -1,0 +1,25 @@
+[package]
+name = "serde_derive_default"
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+description = "Derive Default using serde field level annotations"
+homepage="https://github.com/BrynCooke/serde-derive-default"
+repository="https://github.com/BrynCooke/serde-derive-default"
+keywords = ["derive", "macro", "serde", "default"]
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = "0.15"
+quote = "0.6"
+thiserror = "1.0"
+regex = "1.5"
+
+
+[dev-dependencies]
+trybuild = "1.0.84"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.8"

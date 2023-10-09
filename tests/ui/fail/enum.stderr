@@ -1,0 +1,5 @@
+error: enums cannot derive Default
+ --> tests/ui/fail/enum.rs:3:1
+  |
+3 | enum Test {
+  | ^^^^
