@@ -6,8 +6,10 @@ extern crate syn;
 extern crate proc_macro;
 
 use proc_macro::TokenStream;
+use syn::punctuated::Punctuated;
 use syn::spanned::Spanned;
-use syn::{Data, DeriveInput, Ident};
+use syn::token::Comma;
+use syn::{Data, DeriveInput, Expr, Ident, Lit, Meta};
 
 #[derive(thiserror::Error, Debug)]
 enum Error {
@@ -17,6 +19,8 @@ enum Error {
     EnumNotSupported,
     #[error("unions cannot derive Default")]
     UnionNotSupported,
+    #[error("failed to parse serde attribute arguments {0}")]
+    ParseArgs(String),
 }
 
 #[proc_macro_derive(Default)]
@@ -42,9 +46,9 @@ fn process_input(input: &DeriveInput) -> Result<TokenStream, Error> {
         .map(|f| {
             let ident = &f.ident;
             if let Some(initializer) = &f.initializer {
-                let initializer_ident = Ident::new(initializer.as_str(), ident.span());
+                let initializer = Ident::new(initializer, ident.span());
                 quote! {
-                    #ident: #initializer_ident()
+                    #ident: #initializer()
                 }
             } else {
                 quote! {
@@ -77,32 +81,44 @@ struct Field {
 fn process_data(data: &Data) -> Result<Vec<Field>, Error> {
     match data {
         Data::Struct(s) => {
-            // We're looking for the pattern `default="foo"` and need to extract foo
-            let regex = regex::Regex::new(r#"default\s*=\s*"([^"]*)""#).unwrap();
             let mut fields = Vec::new();
             for field in s.fields.iter() {
                 let ident = field.ident.as_ref().ok_or(Error::MissingFieldIdent)?;
-                let initializer = field
-                    .attrs
-                    .iter()
-                    .find(|a| a.path.is_ident("serde"))
-                    .map(|a| a.tts.to_string())
-                    .and_then(|serde| {
-                        if let Some(capture) = regex.captures(&serde) {
-                            capture.get(1).map(|m| m.as_str().to_string())
-                        } else {
-                            None
-                        }
-                    });
+                let serde = field.attrs.iter().find(|a| a.path().is_ident("serde"));
+                if let Some(serde) = serde {
+                    let meta_list = serde
+                        .parse_args_with(Punctuated::<Meta, Token![,]>::parse_terminated)
+                        .map_err(|e| Error::ParseArgs(e.to_string()))?;
 
-                fields.push(Field {
-                    ident: ident.clone(),
-                    initializer,
-                });
+                    fields.push(Field {
+                        ident: ident.clone(),
+                        initializer: find_default(meta_list),
+                    });
+                } else {
+                    fields.push(Field {
+                        ident: ident.clone(),
+                        initializer: None,
+                    });
+                }
             }
             Ok(fields)
         }
         Data::Enum(_) => Err(Error::EnumNotSupported),
         Data::Union(_) => Err(Error::UnionNotSupported),
     }
+}
+
+fn find_default(meta_list: Punctuated<Meta, Comma>) -> Option<String> {
+    for meta in meta_list {
+        if let Meta::NameValue(name_value) = meta {
+            if name_value.path.is_ident("default") {
+                if let Expr::Lit(val) = &name_value.value {
+                    if let Lit::Str(val) = &val.lit {
+                        return Some(val.value().clone());
+                    }
+                }
+            }
+        }
+    }
+    None
 }
