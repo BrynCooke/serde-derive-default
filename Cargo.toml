@@ -1,6 +1,6 @@
 [package]
 name = "serde_derive_default"
-version = "0.1.0"
+version = "0.1.1"
 edition = "2021"
 license = "Apache-2.0"
 description = "Derive Default using serde field level annotations"
